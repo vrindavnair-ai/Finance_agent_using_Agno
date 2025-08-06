@@ -1,0 +1,79 @@
+import os
+from dotenv import load_dotenv
+import gradio as gr
+from agno.agent import Agent
+#from agno.agent import agent
+#for llm model
+#from agno.models.openai import OpenAIChat
+#for search engine
+from agno.tools.duckduckgo import DuckDuckGoTools
+#the finance tool to get stock price
+from agno.tools.yfinance import YFinanceTools
+#import google.generativeai as genai
+from agno.models.google import Gemini
+from agno.agent import agent
+print("agent : ",agent)
+
+
+
+#To load enviroment variables
+load_dotenv()
+#os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+#genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+
+try:
+    #Web agent to search general web content
+    web_agent = Agent(
+        name ="Web Agent",
+        role = "Search the web for information",
+        #model = OpenAIChat(id="gpt-4o"),
+        model = Gemini(id="gemini-1.5-flash",api_key=os.getenv("GEMINI_API_KEY")),
+        tools = [DuckDuckGoTools()],
+        instructions ='Always include sources',
+        show_tool_calls =True,
+        markdown = True,
+    )
+    #finance agent to retrieve stock and finance data
+    finance_agent = Agent(
+        name = "Finance Agent",
+        role = "Get financial data",
+        #model = OpenAIChat(id="gpt-4o"),
+        model = Gemini(id="gemini-1.5-flash",api_key=os.getenv("GEMINI_API_KEY")),
+        tools = [
+            YFinanceTools(
+                stock_price=True,
+                analyst_recommendations=True,
+                stock_fundamentals=True,
+                company_info=True
+            )
+        ],
+        instructions="Use tables to display data",
+        show_tool_calls = True,
+    )
+    #Team of agents working together
+    agent_team = Agent(
+        team=[web_agent, finance_agent],
+        #model = OpenAIChat(id="gpt-4o"),
+        model = Gemini(id="gemini-1.5-flash",api_key=os.getenv("GEMINI_API_KEY")),
+        instructions = ["Always include sources", "Use tables to display data"],
+        show_tool_calls =True,
+        markdown=True,
+    )
+
+    #gradio function to interface with agents
+    def chat_with_agents(user_input):
+        result = agent_team.run(user_input)
+        return result.content if hasattr(result, "content") else str(result)
+
+    #Launch gradio app
+    gr.Interface(
+        fn=chat_with_agents,
+        inputs = gr.Textbox(lines=4, placeholder="Ask about Apple, Tesla, NVIDIA or any other market question...."),
+        outputs=gr.Markdown(),
+        title="AI Finance market Assistant",
+        description="Ask financial, stock, or market-related questions forwarded by LLM model",
+    ).launch(share=True)
+
+except Exception as e:
+    print ("error is :",e)
